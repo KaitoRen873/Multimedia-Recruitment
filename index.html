@@ -768,7 +768,18 @@ footer{ background:#000; color:var(--gray-400); padding:36px 0; }
 const SUPABASE_URL = "YOUR_SUPABASE_PROJECT_URL";
 const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
 
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const isSupabaseConfigured = SUPABASE_URL.startsWith("http") && !SUPABASE_ANON_KEY.startsWith("YOUR_");
+
+let supabaseClient = null;
+if(isSupabaseConfigured){
+  try{
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  } catch(err){
+    console.error('Failed to initialize Supabase client:', err);
+  }
+} else {
+  console.warn('Supabase is not configured yet: replace SUPABASE_URL and SUPABASE_ANON_KEY in index.html.');
+}
 
 /* ---------- Year ---------- */
 document.getElementById('year').textContent = new Date().getFullYear();
@@ -885,6 +896,11 @@ form.addEventListener('submit', async (e) => {
 
   if(!validateForm(data)){
     showStatus('error', 'Please fix the highlighted fields and try again.');
+    return;
+  }
+
+  if(!supabaseClient){
+    showStatus('error', "This form isn't connected to Supabase yet. Add your SUPABASE_URL and SUPABASE_ANON_KEY in index.html to enable submissions.");
     return;
   }
 
