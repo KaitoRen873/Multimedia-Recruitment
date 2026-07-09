@@ -343,11 +343,17 @@ header{
 .submit-row .btn:disabled{ opacity:.55; cursor:not-allowed; transform:none !important; box-shadow:none !important; }
 
 .form-status{
-  border-radius:14px; padding:16px 18px; font-size:.92rem; display:none; gap:10px; align-items:flex-start;
+  border-radius:14px; padding:16px 18px; font-size:.92rem; display:none; flex-direction:column; gap:14px; align-items:flex-start;
 }
 .form-status.show{ display:flex; }
 .form-status.success{ background:rgba(255,212,0,.12); border:1px solid rgba(255,212,0,.4); color:var(--yellow); }
 .form-status.error{ background:rgba(255,92,92,.1); border:1px solid rgba(255,92,92,.4); color:#ff8b8b; }
+.status-action{
+  display:inline-flex; align-items:center; gap:8px;
+  background:var(--yellow); color:var(--ink); font-weight:600; font-size:.88rem;
+  padding:11px 22px; border-radius:100px; transition:transform .3s var(--ease);
+}
+.status-action:hover{ transform:translateY(-2px); }
 
 /* =========================================================
    FAQ
@@ -413,7 +419,7 @@ footer{ background:#000; color:var(--gray-400); padding:36px 0; }
       <a href="#contact">Contact</a>
     </div>
     <div class="nav-cta">
-      <a href="#register" class="btn btn-ghost">Register</a>
+      <a href="#" id="memberLoginLink" class="btn btn-ghost">Member Login</a>
       <a href="#register" class="btn btn-primary">Join Now</a>
       <button class="burger" id="burgerBtn" aria-label="Open menu">
         <span></span><span></span><span></span>
@@ -427,6 +433,7 @@ footer{ background:#000; color:var(--gray-400); padding:36px 0; }
     <a href="#register">Register</a>
     <a href="#faq">FAQ</a>
     <a href="#contact">Contact</a>
+    <a href="#" id="memberLoginLinkMobile">Member Login</a>
   </div>
 </header>
 
@@ -591,12 +598,12 @@ footer{ background:#000; color:var(--gray-400); padding:36px 0; }
       <div class="register-info">
         <p class="eyebrow on-dark">Registration</p>
         <h2>Apply to join</h2>
-        <p>Fill out the form and submit — an officer will review your application. This form does not create a login account; it only records your application.</p>
+        <p>Fill out the form to submit your application and create your member account in the same step. Once approved, log in on the main Multimedia Club website using the email and password you set here.</p>
         <ul class="register-list">
           <li>Takes less than 3 minutes</li>
           <li>Open to all grade levels and sections</li>
           <li>No experience necessary</li>
-          <li>Officers will follow up by email</li>
+          <li>Creates your login for the main club site</li>
         </ul>
       </div>
 
@@ -634,6 +641,18 @@ footer{ background:#000; color:var(--gray-400); padding:36px 0; }
           <div class="field" id="field-email">
             <label for="email">Email Address <span class="req">*</span></label>
             <input type="email" id="email" name="email" placeholder="you@example.com" autocomplete="email">
+            <span class="err"></span>
+          </div>
+
+          <div class="field" id="field-password">
+            <label for="password">Create Password <span class="req">*</span></label>
+            <input type="password" id="password" name="password" placeholder="At least 8 characters" autocomplete="new-password">
+            <span class="err"></span>
+          </div>
+
+          <div class="field" id="field-confirm_password">
+            <label for="confirm_password">Confirm Password <span class="req">*</span></label>
+            <input type="password" id="confirm_password" name="confirm_password" placeholder="Re-enter your password" autocomplete="new-password">
             <span class="err"></span>
           </div>
 
@@ -768,6 +787,11 @@ footer{ background:#000; color:var(--gray-400); padding:36px 0; }
 const SUPABASE_URL = "YOUR_SUPABASE_PROJECT_URL";
 const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
 
+/* This must be the SAME Supabase project used by your main club
+   website, so accounts created here can log in over there.
+   Point this at the main site's login page. */
+const MAIN_SITE_LOGIN_URL = "https://your-main-club-website.example.com/login";
+
 const isSupabaseConfigured = SUPABASE_URL.startsWith("http") && !SUPABASE_ANON_KEY.startsWith("YOUR_");
 
 let supabaseClient = null;
@@ -783,6 +807,12 @@ if(isSupabaseConfigured){
 
 /* ---------- Year ---------- */
 document.getElementById('year').textContent = new Date().getFullYear();
+
+/* ---------- Member login links → main site ---------- */
+['memberLoginLink', 'memberLoginLinkMobile'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.href = MAIN_SITE_LOGIN_URL;
+});
 
 /* ---------- Mobile menu ---------- */
 const burgerBtn = document.getElementById('burgerBtn');
@@ -844,7 +874,7 @@ function setFieldError(fieldId, message){
 }
 
 function clearAllErrors(){
-  ['full_name','student_id','grade_level','section','email','preferred_specialty','agree'].forEach(f => setFieldError(f, ''));
+  ['full_name','student_id','grade_level','section','email','password','confirm_password','preferred_specialty','agree'].forEach(f => setFieldError(f, ''));
 }
 
 function validateForm(data){
@@ -861,6 +891,18 @@ function validateForm(data){
     setFieldError('email', 'Please enter a valid email address.'); valid = false;
   }
 
+  if(!data.password){
+    setFieldError('password', 'Please create a password.'); valid = false;
+  } else if(data.password.length < 8){
+    setFieldError('password', 'Password must be at least 8 characters.'); valid = false;
+  }
+
+  if(!data.confirm_password){
+    setFieldError('confirm_password', 'Please confirm your password.'); valid = false;
+  } else if(data.password && data.confirm_password !== data.password){
+    setFieldError('confirm_password', 'Passwords do not match.'); valid = false;
+  }
+
   if(!data.preferred_specialty || !SPECIALTIES.includes(data.preferred_specialty)){
     setFieldError('preferred_specialty', 'Please select a specialty.'); valid = false;
   }
@@ -872,9 +914,17 @@ function validateForm(data){
   return valid;
 }
 
-function showStatus(type, message){
+function showStatus(type, message, html){
   formStatus.className = 'form-status show ' + type;
-  formStatus.textContent = message;
+  if(html){
+    formStatus.innerHTML = '';
+    const p = document.createElement('div');
+    p.textContent = message;
+    formStatus.appendChild(p);
+    formStatus.insertAdjacentHTML('beforeend', html);
+  } else {
+    formStatus.textContent = message;
+  }
 }
 
 form.addEventListener('submit', async (e) => {
@@ -889,6 +939,8 @@ form.addEventListener('submit', async (e) => {
     grade_level: form.grade_level.value,
     section: form.section.value.trim(),
     email: form.email.value.trim(),
+    password: form.password.value,
+    confirm_password: form.confirm_password.value,
     contact_number: form.contact_number.value.trim(),
     preferred_specialty: form.preferred_specialty.value,
     agree: form.agree.checked
@@ -907,8 +959,28 @@ form.addEventListener('submit', async (e) => {
   submitBtn.disabled = true;
   submitBtn.textContent = 'Submitting…';
 
+  const loginButton = `<a class="status-action" href="${MAIN_SITE_LOGIN_URL}">Go to Member Login →</a>`;
+
   try{
-    const { error } = await supabaseClient
+    // Step 1: create the member's login account (shared Supabase project
+    // with the main club website, so this account logs in there too).
+    const { data: signUpData, error: signUpError } = await supabaseClient.auth.signUp({
+      email: data.email,
+      password: data.password,
+      options: { data: { full_name: data.full_name } }
+    });
+
+    if(signUpError){
+      if(/already registered|already exists/i.test(signUpError.message)){
+        setFieldError('email', 'This email is already registered.');
+        showStatus('error', "That email already has an account. If it's yours, log in on the main site below — otherwise contact an officer.", loginButton);
+        return;
+      }
+      throw signUpError;
+    }
+
+    // Step 2: record the application, linked to the new account when available.
+    const { error: insertError } = await supabaseClient
       .from('applications')
       .insert([{
         full_name: data.full_name,
@@ -918,15 +990,25 @@ form.addEventListener('submit', async (e) => {
         email: data.email,
         contact_number: data.contact_number || null,
         preferred_specialty: data.preferred_specialty,
-        status: 'Pending'
+        status: 'Pending',
+        user_id: signUpData?.user?.id || null
       }]);
 
-    if(error) throw error;
+    if(insertError) throw insertError;
 
-    showStatus('success', "Thank you for registering! Your application has been received. The Multimedia Club officers will review your submission and contact you if needed.");
+    const needsConfirmation = signUpData?.user && !signUpData?.session;
+    const confirmNote = needsConfirmation
+      ? " Check your email to confirm your account before logging in."
+      : "";
+
+    showStatus(
+      'success',
+      "Thank you for registering! Your application has been received and your member account has been created." + confirmNote + " The Multimedia Club officers will review your submission and contact you if needed.",
+      loginButton
+    );
     form.reset();
   } catch(err){
-    console.error('Supabase insert error:', err);
+    console.error('Supabase registration error:', err);
     showStatus('error', "Something went wrong while submitting your application. Please check your connection and try again, or reach out to the club through the Contact section below.");
   } finally{
     submitBtn.disabled = false;

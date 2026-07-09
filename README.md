@@ -1,59 +1,100 @@
 # MSHS Multimedia Club — Join Portal
 
-A standalone recruitment site for the MSHS Multimedia Club. It has no login/auth —
-its only job is to explain the club and collect membership applications into Supabase.
+A recruitment site for the MSHS Multimedia Club. Registering here **creates a real
+Supabase Auth account** (email + password) in the same Supabase project as your main
+club website, so members can log in there with the same credentials. It also includes
+an **admin dashboard** (`admin.html`) for officers to review and manage applications.
 
 ## Files
 
-- `index.html` — the entire site (HTML + CSS + JS in one file).
-- `schema.sql` — the Supabase table + Row Level Security policies.
-- `netlify.toml` — deployment config for Netlify.
+- `index.html` — the public recruitment site + registration form.
+- `admin.html` — officer-only login and applications dashboard.
+- `schema.sql` — Supabase tables, triggers, and Row Level Security policies.
+- `netlify.toml` — optional deployment config for Netlify (safe to ignore/delete if you're using GitHub Pages or another host).
 
 ## 1. Set up Supabase
 
-1. Create a project at [supabase.com](https://supabase.com).
-2. Open the **SQL Editor** and run the contents of `schema.sql`. This creates the
-   `applications` table and locks it down with RLS so that:
-   - anyone can **submit** an application (`insert`)
-   - nobody using the public site can **read, edit, or delete** applications
-   - officers/admins review submissions in the Supabase **Table Editor** (this uses
-     your project credentials and bypasses RLS, exactly as intended for admins).
-3. Go to **Project Settings → API** and copy your **Project URL** and **anon public key**.
+1. Use the **same Supabase project** as your main club website (this is what lets an
+   account created here log in over there).
+2. Open the **SQL Editor** and run all of `schema.sql`. This creates:
+   - `public.profiles` — one row per user, with a `role` of `'member'` or `'admin'`, auto-created whenever someone signs up.
+   - `public.applications` — the membership applications, with a `user_id` linking each one to the applicant's account.
+   - RLS policies so that: anyone can submit an application; only admins can view, update, or delete applications; every user can see their own profile row (needed for the admin dashboard's role check).
+3. In **Authentication → Providers**, make sure **Email** sign-up is enabled. Under
+   **Authentication → Settings**, decide whether "Confirm email" is on — if it's on,
+   new members must click a confirmation link before they can log in (the form already
+   tells them this when it applies).
+4. Go to **Project Settings → API** and copy your **Project URL** and **anon public key**.
 
-## 2. Connect the site to your Supabase project
+## 2. Connect both pages to Supabase
 
-Open `index.html` and find this block near the bottom, inside the `<script>` tag:
+In **both** `index.html` and `admin.html`, find:
 
 ```js
 const SUPABASE_URL = "YOUR_SUPABASE_PROJECT_URL";
 const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
 ```
 
-Replace both values with the ones from your Supabase project. The anon/public key is
-safe to expose in client-side code — it can only do what your RLS policies allow,
-which here is limited to inserting new applications.
+and replace with your real values — **the same values in both files**, since they
+need to point at the same project.
 
-## 3. Run it locally
+## 3. Point registration at your main site's login page
 
-No build step needed — it's a static file. Just open `index.html` in a browser, or
-serve the folder with any static server, e.g.:
+In `index.html`, find:
+
+```js
+const MAIN_SITE_LOGIN_URL = "https://your-main-club-website.example.com/login";
+```
+
+and set it to your main website's actual login URL. After a successful registration,
+members see a "Go to Member Login" button that sends them there.
+
+## 4. Create your first admin
+
+New accounts default to `role = 'member'`. To make yourself an admin:
+
+1. Register once through the Join Portal's form (or sign up directly in Supabase Auth) using the account you want to use as an officer/admin.
+2. In the Supabase SQL Editor, run:
+   ```sql
+   update public.profiles set role = 'admin' where email = 'your-email@example.com';
+   ```
+3. You can now sign in at `admin.html` with that email and password.
+
+Promote additional officers the same way — this must be done from the SQL editor
+(or your own internal tool using the service role key), never from the public site,
+so nobody can grant themselves admin access.
+
+## 5. Run it locally
+
+No build step needed — both pages are static files. Open `index.html` or `admin.html`
+directly in a browser, or serve the folder with:
 
 ```bash
 npx serve .
 ```
 
-## 4. Deploy to Netlify
+## 6. Deploy
 
-**Option A — drag and drop:** go to [app.netlify.com/drop](https://app.netlify.com/drop)
-and drag this folder in.
+**GitHub Pages:** push this folder to a repo, then in **Settings → Pages** set the
+source to your branch/folder. You'll get a URL like
+`https://yourusername.github.io/your-repo-name/` — `admin.html` will be reachable at
+`.../admin.html`. (`netlify.toml` isn't used here — you can leave or delete it.)
 
-**Option B — Git:** push this folder to a repository, then in Netlify choose
-"Import an existing project" and point it at the repo. `netlify.toml` is already
-configured with `publish = "."`, so no build command is required.
+**Netlify:** drag the folder into [app.netlify.com/drop](https://app.netlify.com/drop),
+or connect a Git repo. `netlify.toml` is already configured for a no-build static deploy.
 
-## Managing applications
+> `admin.html` isn't linked from the public navigation, but it isn't secret either —
+> anyone can find the URL. That's fine: the real protection is the Supabase login +
+> admin role check, not the URL being hidden.
 
-Applications land in the `applications` table with `status = 'Pending'`. Officers can
-open the Supabase Table Editor to review each row and manually update `status` to
-`Reviewed`, `Approved`, or `Declined` as they process applications. There is no
-customer-facing login — review happens entirely on the Supabase side.
+## How it fits together
+
+- **Join Portal (`index.html`)** — public. Registering calls `supabase.auth.signUp()`
+  to create the member's login, then inserts a row into `applications` linked to that
+  account. No admin powers here.
+- **Main club website** — separate, existing site. Members log in there using the
+  email/password they set on the Join Portal, since it's the same Supabase project.
+- **Admin Dashboard (`admin.html`)** — officers sign in, the page checks their
+  `profiles.role`, and only admins get past the login screen. From there they can
+  search, filter (by status/specialty/grade), update an application's status
+  (Pending/Reviewed/Approved/Declined), or delete an entry.
